@@ -1,8 +1,10 @@
+using UnityEngine;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using UnityEngine;
 using System.Threading;
+using System.Collections.Concurrent;
+using System;
 
 public class MyListener : MonoBehaviour
 {
@@ -11,13 +13,26 @@ public class MyListener : MonoBehaviour
     TcpListener server;
     TcpClient client;
     bool running;
-
+    ConcurrentQueue<string> fileCopyQueue = new ConcurrentQueue<string>();
+    Vector3 position = Vector3.zero;
 
     void Start()
     {
         ThreadStart ts = new ThreadStart(GetData);
         thread = new Thread(ts);
         thread.Start();
+    }
+
+    void Update()
+    {
+        // Process file copy requests on the main thread
+        while (fileCopyQueue.TryDequeue(out string filePath))
+        {
+            FileCopier.CopyFile(filePath);
+        }
+
+        // Update the object's position
+        transform.position = position;
     }
 
     void GetData()
@@ -38,49 +53,47 @@ public class MyListener : MonoBehaviour
 
     void Connection()
     {
-        // Read data from stream
-        NetworkStream nwStream = client.GetStream();
-        byte[] buffer = new byte[client.ReceiveBufferSize];
-        int bytesRead = nwStream.Read(buffer, 0, client.ReceiveBufferSize);
-
-        // Decode
-        string dataReceived = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-        
-        if (dataReceived != null && dataReceived != "")
+        try
         {
-            // Convert
-            position = ParseData(dataReceived);
-            nwStream.Write(buffer, 0, bytesRead);
+            // Read data from stream
+            NetworkStream nwStream = client.GetStream();
+            byte[] buffer = new byte[client.ReceiveBufferSize];
+            int bytesRead = nwStream.Read(buffer, 0, client.ReceiveBufferSize);
+
+            // Decode
+            string dataReceived = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+            if (!string.IsNullOrEmpty(dataReceived))
+            {
+                string[] parts = dataReceived.Split(',');
+                if (parts.Length > 3)
+                {
+                    string sourceFilePath = parts[3];
+                    fileCopyQueue.Enqueue(sourceFilePath);
+                }
+
+                // Convert position data
+                position = ParseData(string.Join(",", parts[0], parts[1], parts[2]));
+                nwStream.Write(buffer, 0, bytesRead);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error in Connection: {ex.Message}");
         }
     }
 
-    //Interpreter
     public static Vector3 ParseData(string dataString)
     {
-        Debug.Log(dataString);
-        // Remove the parentheses
         if (dataString.StartsWith("(") && dataString.EndsWith(")"))
         {
             dataString = dataString.Substring(1, dataString.Length - 2);
         }
 
-        // Split into an array
         string[] stringArray = dataString.Split(',');
-
-        //Store
-        Vector3 result = new Vector3(
+        return new Vector3(
             float.Parse(stringArray[0]),
             float.Parse(stringArray[1]),
             float.Parse(stringArray[2]));
-
-        return result;
-    }
-
-    Vector3 position = Vector3.zero;
-
-    void Update()
-    {
-        // Set this object's position
-        transform.position = position;
     }
 }
