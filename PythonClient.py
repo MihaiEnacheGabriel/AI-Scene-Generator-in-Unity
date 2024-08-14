@@ -1,8 +1,8 @@
 import socket
 
 host, port = "127.0.0.1", 25001
-data = "1,2,3"
-source_file_path = "C:/Users/Mihai/Downloads/CharacterLowPoly.unitypackage"
+data = "-6,-6,-14"
+source_file_path = "https://drive.usercontent.google.com/u/0/uc?id=1QWcRu-xqVMRXI-SJPFqYuXMYK9gzmRt9&export=download"
 
 data_to_send = f"{data},{source_file_path}"
 

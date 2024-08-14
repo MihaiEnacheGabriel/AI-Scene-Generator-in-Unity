@@ -1,30 +1,33 @@
-using UnityEngine;
-using System.IO;
 using System;
+using System.IO;
+using System.Text.RegularExpressions;
 using UnityEditor;
+using UnityEngine;
 
 public static class FileCopier
 {
     public static void CopyFile(string sourceFilePath)
     {
+        string destinationFolderPath = "Assets/";
+        string fileName = Path.GetFileName(sourceFilePath);
+        fileName = SanitizeFileName(fileName);
+        string destinationFilePath = Path.Combine(destinationFolderPath, fileName);
+
         try
         {
-            string destinationFolderPath = "Assets/";
-            string fileName = Path.GetFileName(sourceFilePath);
-            string destinationFilePath = Path.Combine(destinationFolderPath, fileName);
-
             if (File.Exists(sourceFilePath))
             {
+                if (File.Exists(destinationFilePath))
+                {
+                    Debug.Log($"File already exists at {destinationFilePath}. Overwriting...");
+                    File.Delete(destinationFilePath);
+                }
+
                 FileUtil.CopyFileOrDirectory(sourceFilePath, destinationFilePath);
                 Debug.Log($"File copied to {destinationFilePath}");
 
-                // Ensure the asset database is updated
                 AssetDatabase.Refresh();
-
-                WaitForFileCopy(destinationFilePath);
-                AssetDatabase.ImportPackage(destinationFilePath, true);
-                // Load and instantiate the object
-                ObjectMaker.CreateObj(destinationFilePath);
+                ObjectMaker.LoadAndInstantiateAssetBundle(destinationFilePath);
             }
             else
             {
@@ -36,22 +39,9 @@ public static class FileCopier
             Debug.LogError($"Error copying file: {ex.Message}");
         }
     }
-    private static void WaitForFileCopy(string filePath)
+
+    private static string SanitizeFileName(string fileName)
     {
-        while (!File.Exists(filePath))
-        {
-            System.Threading.Thread.Sleep(300); // Wait for 100 milliseconds
-        }
-
-        long fileSize = new FileInfo(filePath).Length;
-        long previousSize = 0;
-
-        // Wait until the file size stops changing
-        while (fileSize != previousSize)
-        {
-            previousSize = fileSize;
-            System.Threading.Thread.Sleep(300); // Wait for 100 milliseconds
-            fileSize = new FileInfo(filePath).Length;
-        }
+        return Regex.Replace(fileName, @"[<>:""/\\|?*]", "_");
     }
 }

@@ -1,10 +1,10 @@
-using UnityEngine;
+using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Collections.Concurrent;
-using System;
+using UnityEngine;
 
 public class MyListener : MonoBehaviour
 {
@@ -13,11 +13,12 @@ public class MyListener : MonoBehaviour
     TcpListener server;
     TcpClient client;
     bool running;
-    ConcurrentQueue<string> fileCopyQueue = new ConcurrentQueue<string>();
+    ConcurrentQueue<string> fileDownloadQueue = new ConcurrentQueue<string>();
     Vector3 position = Vector3.zero;
 
     void Start()
     {
+        position = transform.position;
         ThreadStart ts = new ThreadStart(GetData);
         thread = new Thread(ts);
         thread.Start();
@@ -25,13 +26,11 @@ public class MyListener : MonoBehaviour
 
     void Update()
     {
-        // Process file copy requests on the main thread
-        while (fileCopyQueue.TryDequeue(out string filePath))
+        while (fileDownloadQueue.TryDequeue(out string assetBundleUrl))
         {
-            FileCopier.CopyFile(filePath);
+            Debug.Log($"Received AssetBundle URL: {assetBundleUrl}");
+            DownloadAssetBundleFromServer.DownloadAssetBundle(assetBundleUrl); // Initiate the download process
         }
-
-        // Update the object's position
         transform.position = position;
     }
 
@@ -40,8 +39,9 @@ public class MyListener : MonoBehaviour
         server = new TcpListener(IPAddress.Any, connectionPort);
         server.Start();
 
-        // Create a client
+        Debug.Log("Server Started");
         client = server.AcceptTcpClient();
+        Debug.Log("Client Found");
 
         running = true;
         while (running)
@@ -55,12 +55,10 @@ public class MyListener : MonoBehaviour
     {
         try
         {
-            // Read data from stream
             NetworkStream nwStream = client.GetStream();
             byte[] buffer = new byte[client.ReceiveBufferSize];
             int bytesRead = nwStream.Read(buffer, 0, client.ReceiveBufferSize);
 
-            // Decode
             string dataReceived = Encoding.UTF8.GetString(buffer, 0, bytesRead);
 
             if (!string.IsNullOrEmpty(dataReceived))
@@ -68,11 +66,10 @@ public class MyListener : MonoBehaviour
                 string[] parts = dataReceived.Split(',');
                 if (parts.Length > 3)
                 {
-                    string sourceFilePath = parts[3];
-                    fileCopyQueue.Enqueue(sourceFilePath);
+                    string assetBundleUrl = parts[3];
+                    fileDownloadQueue.Enqueue(assetBundleUrl); // Enqueue the URL for downloading
                 }
 
-                // Convert position data
                 position = ParseData(string.Join(",", parts[0], parts[1], parts[2]));
                 nwStream.Write(buffer, 0, bytesRead);
             }
@@ -89,7 +86,6 @@ public class MyListener : MonoBehaviour
         {
             dataString = dataString.Substring(1, dataString.Length - 2);
         }
-
         string[] stringArray = dataString.Split(',');
         return new Vector3(
             float.Parse(stringArray[0]),
